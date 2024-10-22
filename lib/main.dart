@@ -1,3 +1,4 @@
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_chat_app/src/auth/providers/auth_provider.dart';
 import 'package:flutter_chat_app/src/login/utils/app_routes.dart';
@@ -10,6 +11,14 @@ import 'package:provider/provider.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await dotenv.load(fileName: ".env");
+
+  await Firebase.initializeApp(
+      options: FirebaseOptions(
+    apiKey: dotenv.get('apiKey'),
+    appId: '356304904601',
+    messagingSenderId: '356304904601',
+    projectId: 'flutter-chat-app-9558b',
+  )); // Inicializa o Firebase
   runApp(const MyApp());
 }
 

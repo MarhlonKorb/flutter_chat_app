@@ -12,14 +12,12 @@ class StartPage extends StatefulWidget {
 class _StartPageState extends State<StartPage> {
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return const Scaffold(
       appBar: DefaultAppBar(
         title: 'App chat',
-        actions: [
-          IconButton(onPressed: () {}, icon: const Icon(Icons.more_vert))
-        ],
+        
       ),
-      body: const LoginPage(),
+      body: LoginPage(),
     );
   }
 }

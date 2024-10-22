@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_chat_app/src/auth/domain/models/store.dart';
 import 'package:flutter_chat_app/src/auth/exceptions/auth_exception.dart';
+import 'package:flutter_chat_app/src/user/domain/models/user.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:http/http.dart' as http;
 
@@ -119,5 +120,17 @@ class AuthProv with ChangeNotifier {
     // Diferença da data de expiração do token com a data atual
     final timeToLogout = _expiryDate?.difference(DateTime.now()).inSeconds;
     _logoutTimer = Timer(Duration(seconds: timeToLogout ?? 0), logout);
+  }
+
+  /// Método para obter informações do usuário
+  User? getUserInfo() {
+    if (!isAuth) {
+      return null; // Retorna null se o usuário não estiver autenticado
+    }
+    return User(
+      token: _token,
+      email: _email,
+      userId: _userId,
+    );
   }
 }

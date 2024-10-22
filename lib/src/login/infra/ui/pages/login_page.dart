@@ -19,18 +19,23 @@ class LoginPage extends StatefulWidget {
 
 class _LoginPageState extends State<LoginPage>
     with SingleTickerProviderStateMixin {
+  /// Globalkey do formulário
   final _formKey = GlobalKey<FormState>();
 
+  /// Controller do email
   final TextEditingController _emailController = TextEditingController();
 
+  /// Controller do password
   final TextEditingController _passwordController = TextEditingController();
 
+  /// Modo de acesso do formulário
   AuthMode _authMode = AuthMode.login;
 
   /// Valida se o usuário está em modo de login
   bool _isLogin() => _authMode == AuthMode.login;
 
-  AnimationController? _controller;
+  /// Controller do animador do campo de password
+  AnimationController? _animacaoPasswordController;
   // Instância do objeto a ser animado
   Animation<double>? _opacityAnimation;
   Animation<Offset>? _slideAnimation;
@@ -38,7 +43,7 @@ class _LoginPageState extends State<LoginPage>
   @override
   void initState() {
     super.initState();
-    _controller = AnimationController(
+    _animacaoPasswordController = AnimationController(
       vsync: this,
       duration: const Duration(
         milliseconds: 300,
@@ -50,7 +55,7 @@ class _LoginPageState extends State<LoginPage>
       end: 1.0,
     ).animate(
       CurvedAnimation(
-        parent: _controller!,
+        parent: _animacaoPasswordController!,
         curve: Curves.linear,
       ),
     );
@@ -60,7 +65,7 @@ class _LoginPageState extends State<LoginPage>
       end: const Offset(0, 0),
     ).animate(
       CurvedAnimation(
-        parent: _controller!,
+        parent: _animacaoPasswordController!,
         curve: Curves.linear,
       ),
     );
@@ -76,95 +81,108 @@ class _LoginPageState extends State<LoginPage>
   /// Método que altera a acessibilidade aos inputs de senha do usuário
   void _switchAuthMode() {
     setState(() {
+      // Reseta os campos do formulário
+      _formKey.currentState?.reset();
       if (_isLogin()) {
         _authMode = AuthMode.signup;
         // Aqui é feita a alternância da animação de acordo com a escolha do usuário
-        _controller?.forward();
+        _animacaoPasswordController?.forward();
       } else {
         _authMode = AuthMode.login;
         // Aqui é feita a alternância da animação de acordo com a escolha do usuário
-        _controller?.reverse();
+        _animacaoPasswordController?.reverse();
       }
     });
   }
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.all(20),
-      child: Form(
-        key: _formKey,
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.start,
-          children: <Widget>[
-            TextFormField(
-              controller: _emailController,
-              decoration: const InputDecoration(labelText: 'Email'),
-              validator: (value) {
-                if (!Validadores.email(value)) {
-                  return 'Por favor, insira um email válido';
-                }
-                return null;
-              },
-            ),
-            const SizedBox(height: 20),
-            TextFormField(
-              controller: _passwordController,
-              decoration: const InputDecoration(labelText: 'Password'),
-              obscureText: true,
-              validator: (value) {
-                if (value == null || value.isEmpty) {
-                  return 'Por favor, insira a senha';
-                }
-                return null;
-              },
-            ),
-            const SizedBox(height: 20),
-            AnimatedContainer(
-              duration: const Duration(milliseconds: 300),
-              curve: Curves.linear,
-              constraints: BoxConstraints(
-                  minHeight: _isLogin() ? 0 : 60,
-                  maxHeight: _isLogin() ? 0 : 120),
-              child: FadeTransition(
-                opacity: _opacityAnimation!,
-                child: SlideTransition(
-                  position: _slideAnimation!,
-                  child: TextFormField(
+    return SingleChildScrollView(
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Form(
+          key: _formKey,
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.start,
+            children: <Widget>[
+              TextFormField(
+                controller: _emailController,
+                decoration: const InputDecoration(labelText: 'Email'),
+                validator: (value) {
+                  if (!Validadores.email(value)) {
+                    return 'Por favor, insira um email válido';
+                  }
+                  return null;
+                },
+              ),
+              const SizedBox(height: 20),
+              TextFormField(
+                controller: _passwordController,
+                decoration: const InputDecoration(labelText: 'Senha'),
+                obscureText: true,
+                validator: (value) {
+                  if (value == null || value.isEmpty) {
+                    return 'Por favor, insira a senha';
+                  }
+                  return null;
+                },
+              ),
+              const SizedBox(height: 20),
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 300),
+                curve: Curves.linear,
+                constraints: BoxConstraints(
+                    minHeight: _isLogin() ? 0 : 60,
+                    maxHeight: _isLogin() ? 0 : 120),
+                child: FadeTransition(
+                  opacity: _opacityAnimation!,
+                  child: SlideTransition(
+                    position: _slideAnimation!,
+                    child: TextFormField(
                       decoration:
-                          const InputDecoration(labelText: 'Confirm password'),
+                          const InputDecoration(labelText: 'Confirmar senha'),
                       keyboardType: TextInputType.emailAddress,
                       obscureText: true,
                       validator: _isLogin()
                           ? null
                           : (_password) {
                               final password = _password ?? '';
+                              if (password.isEmpty) {
+                                return 'Por favor, insira a senha';
+                              }
                               if (password != _passwordController.text) {
                                 return 'Senhas informadas não conferem';
                               }
                               return null;
-                            }),
+                            },
+                    ),
+                  ),
                 ),
               ),
-            ),
-            const SizedBox(height: 20),
-            DefaultElevatedButton(
-              onPressed: () async {
-                if (_formKey.currentState!.validate()) {
-                  await _executaCadastroOuLogin();
-                }
-              },
-              child: Text(_isLogin() ? 'LOG IN' : 'REGISTER'),
-            ),
-            const SizedBox(height: 40),
-            const LineWithText(text: 'OR'),
-            const SizedBox(height: 40),
-            DefaultElevatedButton(
-              backgroundColor: Colors.grey,
-              onPressed: () => _switchAuthMode(),
-              child: Text(_isLogin() ? 'SIGN IN' : 'LOG IN'),
-            ),
-          ],
+              const SizedBox(height: 20),
+              DefaultElevatedButton(
+                icon: _isLogin() ? Icons.login : Icons.done,
+                iconBefore: false,
+                onPressed: () async {
+                  if (_formKey.currentState!.validate()) {
+                    await _executaCadastroOuLogin();
+                  }
+                },
+                child: Text(_isLogin() ? 'ACESSAR' : 'CADASTRAR'),
+              ),
+              const SizedBox(height: 40),
+              const LineWithText(text: 'OU'),
+              const SizedBox(height: 40),
+              DefaultElevatedButton(
+                icon: _isLogin() ? null : Icons.login,
+                isWhiteStyle: true,
+                onPressed: () => _switchAuthMode(),
+                child: Text(_isLogin()
+                    ? 'Ainda não se cadastrou? Cadastre-se.'
+                    : 'Já possui uma conta? Acesse!'),
+              ),
+            ],
+          ),
         ),
       ),
     );
