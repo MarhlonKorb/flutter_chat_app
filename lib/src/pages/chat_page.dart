@@ -1,187 +1,252 @@
+import 'dart:async';
+import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:flutter_chat_app/src/auth/providers/auth_provider.dart';
-import 'package:flutter_chat_app/src/chat/domain/models/message.dart';
-import 'package:flutter_chat_app/src/user/domain/models/user.dart';
-import 'package:intl/intl.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_chat_app/src/widgets/default_app_bar.dart';
+import 'package:flutter_sound/flutter_sound.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 class ChatPage extends StatefulWidget {
-  static const pageName = '/chat';
-
   const ChatPage({super.key});
 
   @override
-  State<ChatPage> createState() => _ChatPageState();
+  ChatPageState createState() => ChatPageState();
 }
 
-class _ChatPageState extends State<ChatPage> {
-  final _messageController = TextEditingController();
-  final _scrollController = ScrollController();
-  final datePattern = 'dd/MM/yyyy, HH:mm';
+class ChatPageState extends State<ChatPage> {
+  final FlutterSoundRecorder _recorder = FlutterSoundRecorder();
+  final FlutterSoundPlayer _player = FlutterSoundPlayer();
+  final TextEditingController _messageController = TextEditingController();
+  List<Map<String, dynamic>> _messages = [];
+  bool isRecording = false;
+  String? _audioPath;
+  Timer? _timer;
+  Duration _recordDuration = Duration.zero;
+  int? currentlyPlayingIndex; // Índice da mensagem que está sendo reproduzida
 
-  List<Message> messages = [
-    Message(
-      author: 'John Doe',
-      message: 'Hey dev!',
-      timestamp: DateTime.now()
-        ..subtract(
-          const Duration(minutes: 5),
-        ),
-    ),
-    Message(
-      author: 'John Doe',
-      message: 'How are you?',
-      timestamp: DateTime.now()
-        ..subtract(
-          const Duration(minutes: 4),
-        ),
-    ),
-  ];
+  @override
+  void initState() {
+    super.initState();
+    _initializeRecorder();
+  }
+
+  Future<void> _initializeRecorder() async {
+    await Permission.microphone.request();
+    await _recorder.openRecorder();
+  }
+
+  @override
+  void dispose() {
+    _recorder.closeRecorder();
+    _player.closePlayer();
+    _timer?.cancel();
+    _messageController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _startRecording() async {
+    if (await Permission.microphone.request().isGranted) {
+      final path =
+          '${Directory.systemTemp.path}/audio_${DateTime.now().millisecondsSinceEpoch}.aac';
+      await _recorder.startRecorder(toFile: path);
+      setState(() {
+        isRecording = true;
+        _audioPath = path;
+        _recordDuration = Duration.zero;
+      });
+
+      _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
+        setState(() {
+          _recordDuration = Duration(seconds: timer.tick);
+        });
+      });
+    }
+  }
+
+  Future<void> _stopRecording() async {
+    await _recorder.stopRecorder();
+    setState(() {
+      isRecording = false;
+      _timer?.cancel();
+    });
+
+    if (_audioPath != null) {
+      _addMessage(content: _audioPath, isAudio: true);
+    }
+  }
+
+  Future<void> _playAudio(int index, String audioPath) async {
+    if (currentlyPlayingIndex == index) {
+      // Se já estiver tocando o áudio atual, pare o player
+      await _player.stopPlayer();
+      setState(() {
+        currentlyPlayingIndex = null;
+      });
+    } else {
+      // Para o áudio anterior, se houver, e começa o novo
+      if (currentlyPlayingIndex != null) {
+        await _player.stopPlayer();
+      }
+      await _player.openPlayer();
+      setState(() {
+        currentlyPlayingIndex = index;
+      });
+      await _player.startPlayer(
+        fromURI: audioPath,
+        whenFinished: () {
+          setState(() {
+            currentlyPlayingIndex = null;
+          });
+        },
+      );
+    }
+  }
+
+  void _addMessage({required String? content, required bool isAudio}) {
+    setState(() {
+      _messages.add({
+        'content': content,
+        'isAudio': isAudio,
+        'time': DateTime.now(),
+      });
+    });
+  }
+
+  String _formatDuration(Duration duration) {
+    String twoDigits(int n) => n.toString().padLeft(2, '0');
+    final minutes = twoDigits(duration.inMinutes.remainder(60));
+    final seconds = twoDigits(duration.inSeconds.remainder(60));
+    return '$minutes:$seconds';
+  }
 
   @override
   Widget build(BuildContext context) {
-    final currentUser = getCurrentUser(context);
     return Scaffold(
-      appBar: AppBar(title: const Text("Chat")),
-      body: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 24.0),
-        child: Column(
-          children: [
-            Flexible(
-              flex: 1,
-              child: (messages.isEmpty)
-                  ? const Center(
-                      child: Text('Nenhuma mensagem recebida...'),
-                    )
-                  : ListView.builder(
-                      itemCount: messages.length,
-                      reverse: true,
-                      controller: _scrollController,
-                      itemBuilder: (_, index) {
-                        final message = messages[index];
-                        return Column(
-                          crossAxisAlignment: message.isMe(currentUser.email)
-                              ? CrossAxisAlignment.end
-                              : CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              mainAxisAlignment: message.isMe(currentUser.email)
-                                  ? MainAxisAlignment.end
-                                  : MainAxisAlignment.start,
-                              children: [
-                                Container(
-                                  padding: const EdgeInsets.all(10),
-                                  margin: message.isMe(currentUser.email)
-                                      ? const EdgeInsets.only(right: 10)
-                                      : const EdgeInsets.only(left: 10),
-                                  width: 200,
-                                  decoration: BoxDecoration(
-                                    color: Colors.black12,
-                                    borderRadius: BorderRadius.circular(10),
-                                  ),
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        message.author,
+      appBar: DefaultAppBar(
+        title: "Marhlon",
+
+        actions: [
+          IconButton(
+            onPressed: () {},
+            icon: const Icon(Icons.more_vert),
+          ),
+        ],
+      ),
+      body: Column(
+        children: [
+          Expanded(
+            child: ListView.builder(
+              itemCount: _messages.length,
+              itemBuilder: (context, index) {
+                final message = _messages[index];
+                final isAudio = message['isAudio'] as bool;
+                return Padding(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 10.0, vertical: 5.0),
+                  child: Card(
+                    elevation: 2,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(15),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.all(10.0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          isAudio
+                              ? Row(
+                                  children: [
+                                    IconButton(
+                                      icon: Icon(
+                                        currentlyPlayingIndex == index
+                                            ? Icons.stop
+                                            : Icons.play_arrow,
+                                        color: Colors.blueAccent,
                                       ),
-                                      const SizedBox(height: 5),
-                                      Text(
-                                        message.message,
-                                      ),
-                                    ],
+                                      onPressed: () =>
+                                          _playAudio(index, message['content']),
+                                    ),
+                                    Text(
+                                        'Áudio: ${_formatDuration(_recordDuration)}'),
+                                  ],
+                                )
+                              : Text(
+                                  message['content'],
+                                  style: const TextStyle(
+                                    fontSize: 16,
+                                    color: Colors.black87,
                                   ),
                                 ),
-                              ],
-                            ),
-                            Container(
-                              margin: const EdgeInsets.symmetric(
-                                  horizontal: 16, vertical: 8),
-                              child: Text(
-                                DateFormat(datePattern).format(
-                                  message.timestamp,
-                                ),
+                          const SizedBox(height: 5),
+                          Align(
+                            alignment: Alignment.bottomRight,
+                            child: Text(
+                              _formatTime(message['time']),
+                              style: const TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey,
                               ),
                             ),
-                          ],
-                        );
-                      },
+                          ),
+                        ],
+                      ),
                     ),
+                  ),
+                );
+              },
             ),
-            SizedBox(
-              height: 60,
-              width: double.infinity,
-              child: Row(
-                children: [
-                  Flexible(
-                    child: TextField(
-                      controller: _messageController,
-                      decoration: const InputDecoration(
-                        border: OutlineInputBorder(),
+          ),
+          if (isRecording)
+            Padding(
+              padding: const EdgeInsets.all(8.0),
+              child: Text('Gravando: ${_formatDuration(_recordDuration)}'),
+            ),
+          Row(
+            children: [
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.all(8.0),
+                  child: TextField(
+                    controller: _messageController,
+                    decoration: InputDecoration(
+                      hintText: 'Digite sua mensagem...',
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(15),
                       ),
                     ),
                   ),
-                  PopupMenuButton<String>(
-                    icon: const Icon(Icons.attach_file),
-                    onSelected: (value) {
-                      // Ação para cada item selecionado
-                      if (value == 'audio') {
-                        // Abrir gravação de áudio
-                      } else if (value == 'video') {
-                        // Abrir gravação de vídeo
-                      } else if (value == 'photo') {
-                        // Tirar foto
-                      }
-                    },
-                    itemBuilder: (BuildContext context) => [
-                      const PopupMenuItem(
-                        value: 'audio',
-                        child: Text('Gravar Áudio'),
-                      ),
-                      const PopupMenuItem(
-                        value: 'video',
-                        child: Text('Gravar Vídeo'),
-                      ),
-                      const PopupMenuItem(
-                        value: 'photo',
-                        child: Text('Tirar Foto'),
-                      ),
-                    ],
-                  ),
-                  Container(
-                    padding: const EdgeInsets.only(left: 8),
-                    child: IconButton(
-                      icon: const Icon(Icons.send_rounded),
-                      onPressed: () async => await _handleSubmit(context),
-                    ),
-                  )
-                ],
+                ),
               ),
-            ),
-          ],
-        ),
+              IconButton(
+                icon: Icon(
+                  isRecording ? Icons.stop : Icons.mic,
+                  color: isRecording ? Colors.red : Colors.blue,
+                ),
+                onPressed: isRecording ? _stopRecording : _startRecording,
+              ),
+              IconButton(
+                icon: const Icon(Icons.camera_alt),
+                onPressed: _sendMessage,
+              ),
+              IconButton(
+                icon: const Icon(Icons.send),
+                onPressed: _sendMessage,
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
 
-  Future<void> _handleSubmit(BuildContext context) async {
-    if (_messageController.text.isNotEmpty) {
-      messages.add(
-        Message(
-          author: getCurrentUser(context).email!,
-          message: _messageController.text,
-          timestamp: DateTime.now(),
-        ),
-      );
-      _messageController.clear();
-      messages.sort((a, b) => b.timestamp.compareTo(a.timestamp));
-      setState(() {});
-    }
+  String _formatTime(DateTime datetime) {
+    return '${datetime.hour.toString().padLeft(2, '0')}:${datetime.minute.toString().padLeft(2, '0')}';
   }
 
-  User getCurrentUser(context) {
-    final authProvider = Provider.of<AuthProv>(listen: false, context);
-    return authProvider.getUserInfo()!;
+  void _sendMessage() {
+    final text = _messageController.text.trim();
+    if (text.isNotEmpty) {
+      _addMessage(content: text, isAudio: false);
+      _messageController.clear();
+    }
   }
 }
