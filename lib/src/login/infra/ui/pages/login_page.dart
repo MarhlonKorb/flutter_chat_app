@@ -5,6 +5,7 @@ import 'package:flutter_chat_app/src/login/utils/app_routes.dart';
 import 'package:flutter_chat_app/src/login/utils/validadores.dart';
 import 'package:flutter_chat_app/src/widgets/custom_dialog.dart';
 import 'package:flutter_chat_app/src/widgets/default_elevated_button.dart';
+import 'package:flutter_chat_app/src/widgets/default_text_form_field.dart';
 import 'package:flutter_chat_app/src/widgets/line_with_text.dart';
 import 'package:provider/provider.dart';
 
@@ -31,8 +32,8 @@ class _LoginPageState extends State<LoginPage>
   /// Modo de acesso do formulário
   AuthMode _authMode = AuthMode.login;
 
-  /// Valida se o usuário está em modo de login
-  bool _isLogin() => _authMode == AuthMode.login;
+  /// Define o ícone inicial
+  IconData _passwordIcon = Icons.lock_open;
 
   /// Controller do animador do campo de password
   AnimationController? _animacaoPasswordController;
@@ -45,21 +46,14 @@ class _LoginPageState extends State<LoginPage>
     super.initState();
     _animacaoPasswordController = AnimationController(
       vsync: this,
-      duration: const Duration(
-        milliseconds: 300,
-      ),
+      duration: const Duration(milliseconds: 300),
     );
-    // Classe que recebe as configurações de animação
-    _opacityAnimation = Tween(
-      begin: 0.0,
-      end: 1.0,
-    ).animate(
+    _opacityAnimation = Tween(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(
         parent: _animacaoPasswordController!,
         curve: Curves.linear,
       ),
     );
-
     _slideAnimation = Tween<Offset>(
       begin: const Offset(0, -1.5),
       end: const Offset(0, 0),
@@ -69,6 +63,25 @@ class _LoginPageState extends State<LoginPage>
         curve: Curves.linear,
       ),
     );
+
+    // Adiciona o listener para atualizar o ícone quando o texto muda
+    _emailController.addListener(_updateEmail);
+    // Adiciona o listener para atualizar o ícone quando o texto muda
+    _passwordController.addListener(_updatePassword);
+  }
+
+  // Método que seta o estado ao escutar alterações do controller de email
+  void _updateEmail() {
+    setState(() {});
+  }
+
+  // Método que atualiza o ícone conforme o texto da senha
+  void _updatePassword() {
+    setState(() {
+      _passwordIcon = _passwordController.text.isEmpty
+          ? Icons.lock_open
+          : Icons.lock_outline;
+    });
   }
 
   @override
@@ -95,19 +108,51 @@ class _LoginPageState extends State<LoginPage>
     });
   }
 
+  bool _isLogin() => _authMode == AuthMode.login;
+
   @override
   Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      child: Padding(
+    return Container(
+      color: Colors.white,
+      child: SingleChildScrollView(
         padding: const EdgeInsets.all(20),
         child: Form(
           key: _formKey,
           child: Column(
             mainAxisAlignment: MainAxisAlignment.start,
-            children: <Widget>[
-              TextFormField(
+            children: [
+              Image.asset(
+                'assets/images/chat-1.gif',
+                fit: BoxFit.contain,
+              ),
+              const Text(
+                'BEM VINDO AO SEU APP DE CONVERSAS!',
+                style: TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.deepPurple,
+                  letterSpacing: 1,
+                  wordSpacing: 2,
+                  shadows: [
+                    Shadow(
+                      blurRadius: 2.0,
+                      color: Colors.pinkAccent,
+                    ),
+                  ],
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(
+                height: 20,
+              ),
+              DefaultTextFormField(
+                icon: Icons.email_outlined,
+                iconColor: !Validadores.email(_emailController.text)
+                    ? Colors.redAccent
+                    : null,
                 controller: _emailController,
-                decoration: const InputDecoration(labelText: 'Email'),
+                labelText: 'Email',
+                keyboardType: TextInputType.emailAddress,
                 validator: (value) {
                   if (!Validadores.email(value)) {
                     return 'Por favor, insira um email válido';
@@ -116,10 +161,14 @@ class _LoginPageState extends State<LoginPage>
                 },
               ),
               const SizedBox(height: 20),
-              TextFormField(
-                controller: _passwordController,
-                decoration: const InputDecoration(labelText: 'Senha'),
+              DefaultTextFormField(
+                icon: _passwordIcon,
+                iconColor:
+                    _passwordController.text.isEmpty ? Colors.redAccent : null,
+                keyboardType: TextInputType.visiblePassword,
                 obscureText: true,
+                controller: _passwordController,
+                labelText: 'Senha',
                 validator: (value) {
                   if (value == null || value.isEmpty) {
                     return 'Por favor, insira a senha';
@@ -127,34 +176,36 @@ class _LoginPageState extends State<LoginPage>
                   return null;
                 },
               ),
-              const SizedBox(height: 20),
+              _isLogin() ? const SizedBox.shrink() : const SizedBox(height: 20),
               AnimatedContainer(
                 duration: const Duration(milliseconds: 300),
                 curve: Curves.linear,
                 constraints: BoxConstraints(
-                    minHeight: _isLogin() ? 0 : 60,
-                    maxHeight: _isLogin() ? 0 : 120),
+                  minHeight: _isLogin() ? 0 : 60,
+                  maxHeight: _isLogin() ? 0 : 120,
+                ),
                 child: FadeTransition(
                   opacity: _opacityAnimation!,
                   child: SlideTransition(
                     position: _slideAnimation!,
-                    child: TextFormField(
-                      decoration:
-                          const InputDecoration(labelText: 'Confirmar senha'),
-                      keyboardType: TextInputType.emailAddress,
+                    child: DefaultTextFormField(
+                      icon: Icons.done_all_rounded,
+                      keyboardType: TextInputType.visiblePassword,
+                      iconColor:
+                          _passwordController.text.isEmpty ? Colors.red : null,
                       obscureText: true,
-                      validator: _isLogin()
-                          ? null
-                          : (_password) {
-                              final password = _password ?? '';
-                              if (password.isEmpty) {
-                                return 'Por favor, insira a senha';
-                              }
-                              if (password != _passwordController.text) {
-                                return 'Senhas informadas não conferem';
-                              }
-                              return null;
-                            },
+                      labelText: 'Confirmar senha',
+                      validator: (value) {
+                        if (_authMode == AuthMode.signup) {
+                          if (value == null || value.isEmpty) {
+                            return 'Por favor, insira a senha';
+                          }
+                          if (value != _passwordController.text) {
+                            return 'Senhas informadas não conferem';
+                          }
+                        }
+                        return null;
+                      },
                     ),
                   ),
                 ),
@@ -170,9 +221,9 @@ class _LoginPageState extends State<LoginPage>
                 },
                 child: Text(_isLogin() ? 'ACESSAR' : 'CADASTRAR'),
               ),
-              const SizedBox(height: 40),
+              const SizedBox(height: 20),
               const LineWithText(text: 'OU'),
-              const SizedBox(height: 40),
+              const SizedBox(height: 20),
               DefaultElevatedButton(
                 icon: _isLogin() ? null : Icons.login,
                 isWhiteStyle: true,
@@ -192,15 +243,12 @@ class _LoginPageState extends State<LoginPage>
     try {
       final auth = Provider.of<AuthProv>(context, listen: false);
       if (_isLogin()) {
-        // Chama o método de login
         await auth.login(
             email: _emailController.text, password: _passwordController.text);
-        // Redireciona para a home do usuário
         await Navigator.of(context).pushNamed(AppRoutes.userHomePage);
       } else {
         await auth.signUp(
             email: _emailController.text, password: _passwordController.text);
-        // Redireciona para a home do usuário
         await Navigator.of(context).pushNamed(AppRoutes.userHomePage);
       }
     } on AuthException catch (e) {

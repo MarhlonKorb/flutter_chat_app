@@ -15,7 +15,7 @@ class DefaultElevatedButton extends StatelessWidget {
     super.key,
     required this.onPressed,
     required this.child,
-    this.borderRadius = 10.0,
+    this.borderRadius = 14.0,
     this.width = double.infinity,
     this.height = 50.0,
     this.icon,

@@ -40,19 +40,27 @@ class UserHomePage extends StatelessWidget {
         child: ListView(
           padding: EdgeInsets.zero,
           children: [
-            DrawerHeader(
-              decoration: const BoxDecoration(
-                color: Colors.black87,
+            const DrawerHeader(
+              decoration: BoxDecoration(
+                color: Colors.indigo,
               ),
-              child: Container(
-                alignment: Alignment.bottomLeft,
-                child: const Text(
-                  'Menu',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 24,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  CircleAvatar(
+                    radius: 40,
+                    backgroundImage: AssetImage('assets/images/homem.png'),
                   ),
-                ),
+                  SizedBox(height: 10), // Espaço entre a imagem e o texto
+                  Text(
+                    'Nome do Usuário', // Nome do usuário
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
               ),
             ),
             ListTile(
