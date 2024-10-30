@@ -1,20 +1,27 @@
-class Message {
+import 'dart:io';
 
-  String author;
-  String message;
-  DateTime timestamp;
+class Message {
+  final String? content;
+  final File? file;
+  final bool? isAudio;
+  final bool? isImage;
+  final bool? isVideo;
+  final bool? isSentByMe;
+  final DateTime? time;
 
   Message({
-    required this.author,
-    required this.message,
-    required this.timestamp,
+    this.content,
+    this.file,
+    this.isAudio = false,
+    this.isImage = false,
+    this.isVideo = false,
+    this.isSentByMe = false,
+    this.time,
   });
 
-  Map<String, dynamic> toJson() => {
-        'author': author,
-        'message': message,
-        'timestamp': timestamp,
-      };
-
-  bool isMe(nickname) => author == nickname;
+  Map<String, String> toJson() {
+    return {
+      'arquivo': content!,
+    };
+  }
 }

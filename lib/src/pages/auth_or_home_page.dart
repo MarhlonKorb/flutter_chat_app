@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_chat_app/src/auth/providers/auth_provider.dart';
 import 'package:flutter_chat_app/src/pages/start_page.dart';
-import 'package:flutter_chat_app/src/pages/user_home_page.dart';
+import 'package:flutter_chat_app/src/pages/home_page.dart';
 import 'package:provider/provider.dart';
 
 class AuthOrHomePage extends StatelessWidget {
@@ -25,7 +25,7 @@ class AuthOrHomePage extends StatelessWidget {
             );
           }
            else {
-            return auth.isAuth ? const UserHomePage() : const StartPage();
+            return auth.isAuth ? const HomePage() : const StartPage();
           }
         },
       ),

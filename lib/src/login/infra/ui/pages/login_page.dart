@@ -124,6 +124,7 @@ class _LoginPageState extends State<LoginPage>
               Image.asset(
                 'assets/images/chat-1.gif',
                 fit: BoxFit.contain,
+                height: 300,
               ),
               const Text(
                 'BEM VINDO AO SEU APP DE CONVERSAS!',
@@ -203,6 +204,7 @@ class _LoginPageState extends State<LoginPage>
                           if (value != _passwordController.text) {
                             return 'Senhas informadas não conferem';
                           }
+                          return null;
                         }
                         return null;
                       },
@@ -245,14 +247,16 @@ class _LoginPageState extends State<LoginPage>
       if (_isLogin()) {
         await auth.login(
             email: _emailController.text, password: _passwordController.text);
-        await Navigator.of(context).pushNamed(AppRoutes.userHomePage);
+        await Navigator.of(context).pushNamed(AppRoutes.homePage);
       } else {
         await auth.signUp(
             email: _emailController.text, password: _passwordController.text);
-        await Navigator.of(context).pushNamed(AppRoutes.userHomePage);
+        await Navigator.of(context).pushNamed(AppRoutes.homePage);
       }
     } on AuthException catch (e) {
       await showCustomDialog(context, DialogType.error, e.toString());
+    } on Exception catch(e){
+      await showCustomDialog(context, DialogType.error, 'Não foi possível realizar o login. Por favor, tente novamente mais tarde.');
     }
   }
 }

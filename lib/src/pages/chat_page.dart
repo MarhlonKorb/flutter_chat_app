@@ -1,31 +1,43 @@
 import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter_chat_app/src/chat/application/impl/chat_service.dart';
+import 'package:flutter_chat_app/src/chat/domain/models/message.dart';
+import 'package:flutter_chat_app/src/chat/domain/models/user_chat.dart';
 import 'package:flutter_chat_app/src/pages/full_screen_image.dart';
+import 'package:flutter_chat_app/src/widgets/custom_dialog.dart';
 import 'package:flutter_chat_app/src/widgets/default_app_bar.dart';
+import 'package:flutter_chat_app/src/widgets/default_text_form_field.dart';
 import 'package:flutter_sound/flutter_sound.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 class ChatPage extends StatefulWidget {
-  const ChatPage({super.key});
+  final UserChat userChat;
+
+  const ChatPage({
+    super.key,
+    required this.userChat,
+  });
 
   @override
   ChatPageState createState() => ChatPageState();
 }
 
 class ChatPageState extends State<ChatPage> {
-  final FlutterSoundRecorder _recorder = FlutterSoundRecorder();
-  final FlutterSoundPlayer _player = FlutterSoundPlayer();
-  final TextEditingController _messageController = TextEditingController();
-  final ScrollController _scrollController =
-      ScrollController(); // Scroll controller
-  final List<Map<String, dynamic>> _messages = [];
+  final _recorder = FlutterSoundRecorder();
+  final _player = FlutterSoundPlayer();
+  final _messageController = TextEditingController();
+  final _scrollController = ScrollController();
+  final _messages = <Message>[];
   bool isRecording = false;
   String? _audioPath;
   Timer? _timer;
   Duration _recordDuration = Duration.zero;
   int? currentlyPlayingIndex;
+  final chatService = ChatService();
+  // Para monitorar se o botão está sendo arrastado
+  bool isDragging = false;
 
   @override
   void initState() {
@@ -33,22 +45,15 @@ class ChatPageState extends State<ChatPage> {
     _initializeRecorder();
     // Mensagens simuladas de outro usuário
     _messages.addAll([
-      {
-        'content': 'Oi, como você está?',
-        'isAudio': false,
-        'isImage': false,
-        'isVideo': false,
-        'isSentByMe': false,
-        'time': DateTime.now().subtract(const Duration(minutes: 2)),
-      },
-      {
-        'content': 'Estou bem, e você?',
-        'isAudio': false,
-        'isImage': false,
-        'isVideo': false,
-        'isSentByMe': true,
-        'time': DateTime.now().subtract(const Duration(minutes: 1)),
-      },
+      Message(
+        content: 'Oi, como você está?',
+        time: DateTime.now().subtract(const Duration(minutes: 2)),
+      ),
+      Message(
+        content: 'Estou bem, e você?',
+        isSentByMe: true,
+        time: DateTime.now().subtract(const Duration(minutes: 1)),
+      ),
     ]);
   }
 
@@ -98,14 +103,14 @@ class ChatPageState extends State<ChatPage> {
     }
   }
 
-  Future<void> _stopRecording() async {
+  Future<void> _stopRecording({bool sendRecord = true}) async {
     await _recorder.stopRecorder();
     setState(() {
       isRecording = false;
       _timer?.cancel();
     });
 
-    if (_audioPath != null) {
+    if (_audioPath != null && sendRecord) {
       _addMessage(content: _audioPath, isAudio: true);
     }
   }
@@ -135,24 +140,36 @@ class ChatPageState extends State<ChatPage> {
     }
   }
 
-  void _addMessage({
+  Future<void> _addMessage({
     required String? content,
     required bool isAudio,
     bool isImage = false,
     bool isVideo = false,
     bool isSentByMe = true,
-  }) {
-    setState(() {
-      _messages.add({
-        'content': content,
-        'isAudio': isAudio,
-        'isImage': isImage,
-        'isVideo': isVideo,
-        'isSentByMe': isSentByMe,
-        'time': DateTime.now(),
-      });
-    });
-    // Rola para a última mensagem após adicionar uma nova
+  }) async {
+    try {
+      // Envia a mensagem com o arquivo, se for áudio, imagem ou vídeo
+      if (isAudio || isImage || isVideo) {
+        // Cria a mensagem com o conteúdo e o arquivo
+        await chatService.sendFile(content!);
+      } else {
+        await chatService.sendMessage(content!);
+        setState(() {
+          _messages.add(Message(
+            content: content,
+            isAudio: isAudio,
+            isImage: isImage,
+            isVideo: isVideo,
+            isSentByMe: isSentByMe,
+            time: DateTime.now(),
+          ));
+        });
+      }
+    } catch (e) {
+      await showCustomDialog(context, DialogType.error,
+          'Não foi possível enviar a mensagem. Por favor, tente novamente mais tarde.');
+    }
+    // Executa scroll para a última mensagem após adicionar uma nova
     _scrollToBottom();
   }
 
@@ -167,7 +184,8 @@ class ChatPageState extends State<ChatPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: DefaultAppBar(
-        title: "Marhlon",
+        permiteRetornar: true,
+        title: widget.userChat.username ?? "Nome do usuário",
         actions: [
           IconButton(
             onPressed: () {},
@@ -183,12 +201,8 @@ class ChatPageState extends State<ChatPage> {
               itemCount: _messages.length,
               itemBuilder: (context, index) {
                 final message = _messages[index];
-                final isAudio = message['isAudio'] as bool;
-                final isImage = message['isImage'] as bool;
-                final isVideo = message['isVideo'] as bool;
-                final isSentByMe = message['isSentByMe'] as bool;
                 Widget messageContent;
-                if (isAudio) {
+                if (message.isAudio!) {
                   messageContent = Row(
                     children: [
                       IconButton(
@@ -196,35 +210,38 @@ class ChatPageState extends State<ChatPage> {
                           currentlyPlayingIndex == index
                               ? Icons.stop
                               : Icons.play_arrow,
-                          color: Colors.blueAccent,
+                          color: Colors.indigoAccent,
                         ),
-                        onPressed: () => _playAudio(index, message['content']),
+                        onPressed: () => _playAudio(index, message.content!),
                       ),
-                      Text('Áudio: ${_formatDuration(_recordDuration)}'),
+                      Text(
+                        'Áudio: ${_formatDuration(_recordDuration)}',
+                        style: const TextStyle(color: Colors.indigo),
+                      ),
                     ],
                   );
-                } else if (isImage) {
+                } else if (message.isImage!) {
                   messageContent = GestureDetector(
                     onTap: () {
                       Navigator.push(
                         context,
                         MaterialPageRoute(
                           builder: (context) =>
-                              FullScreenImage(imagePath: message['content']),
+                              FullScreenImage(imagePath: message.content!),
                         ),
                       );
                     },
                     child: Hero(
-                      tag: message['content'],
+                      tag: message.content!,
                       child: Image.file(
-                        File(message['content']),
+                        File(message.content!),
                         height: 150,
                         width: 150,
                         fit: BoxFit.cover,
                       ),
                     ),
                   );
-                } else if (isVideo) {
+                } else if (message.isVideo!) {
                   messageContent = GestureDetector(
                     onTap: () {
                       // Lógica para abrir um player de vídeo
@@ -241,29 +258,29 @@ class ChatPageState extends State<ChatPage> {
                   );
                 } else {
                   messageContent = Text(
-                    message['content'],
+                    message.content!,
                     style: const TextStyle(
                       fontSize: 16,
-                      color: Colors.black87,
+                      color: Colors.indigo,
                     ),
                   );
                 }
 
                 return Align(
-                  alignment:
-                      isSentByMe ? Alignment.centerRight : Alignment.centerLeft,
+                  alignment: message.isSentByMe!
+                      ? Alignment.centerRight
+                      : Alignment.centerLeft,
                   child: Padding(
                     padding: const EdgeInsets.symmetric(
                         horizontal: 10.0, vertical: 5.0),
                     child: ConstrainedBox(
                       constraints: BoxConstraints(
-                        maxWidth: MediaQuery.of(context).size.width *
-                            0.7, // Card menor
+                        maxWidth: MediaQuery.of(context).size.width * 0.7,
                       ),
                       child: Card(
-                        color: isSentByMe
+                        color: message.isSentByMe!
                             ? Colors.blue[50]
-                            : Colors.grey[200], // Cores diferentes
+                            : Colors.grey[200],
                         elevation: 2,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(15),
@@ -278,7 +295,7 @@ class ChatPageState extends State<ChatPage> {
                               Align(
                                 alignment: Alignment.bottomRight,
                                 child: Text(
-                                  _formatTime(message['time']),
+                                  _formatTime(message.time!),
                                   style: const TextStyle(
                                     fontSize: 12,
                                     color: Colors.grey,
@@ -305,28 +322,56 @@ class ChatPageState extends State<ChatPage> {
               Expanded(
                 child: Padding(
                   padding: const EdgeInsets.all(8.0),
-                  child: TextField(
+                  child: DefaultTextFormField(
+                    hintText: 'Digite sua mensagem...',
                     controller: _messageController,
-                    decoration: InputDecoration(
-                      focusColor: Colors.blueAccent,
-                      hintText: 'Digite sua mensagem...',
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(15),
-                      ),
-                    ),
                   ),
                 ),
               ),
               GestureDetector(
-                onLongPress: _startRecording, 
-                onLongPressUp: _stopRecording,
+                onLongPressStart: (details) {
+                  _startRecording();
+                  setState(() {
+                    // Inicia sem arrastar
+                    isDragging = false;
+                  });
+                },
+                onLongPressMoveUpdate: (details) {
+                  // Verifica a posição do toque
+                  RenderBox renderBox = context.findRenderObject() as RenderBox;
+                  Offset localPosition =
+                      renderBox.globalToLocal(details.globalPosition);
+
+                  // Verifica se o toque saiu do botão
+                  if (localPosition.distance > 800) {
+                    // Exemplo: se arrastado acima do botão
+                    setState(() {
+                      // Está arrastando
+                      isDragging = true;
+                      isRecording = false;
+                    });
+                  }
+                },
+                onLongPressUp: () {
+                  if (isDragging) {
+                    // Cancela a gravação se arrastado
+                    _discardRecording();
+                  } else {
+                    // Para a gravação normalmente
+                    _stopRecording();
+                  }
+                  setState(() {
+                    // Reinicializa o estado
+                    isDragging = false;
+                  });
+                },
                 child: CircleAvatar(
-                  radius: isRecording ? 20 : 15,
-                  backgroundColor: isRecording ? Colors.red : Colors.indigoAccent,
+                  radius: isRecording ? 30 : 25,
+                  backgroundColor: isRecording ? Colors.red : Colors.indigo,
                   child: Icon(
                     isRecording ? Icons.stop : Icons.mic,
                     color: Colors.white,
-                    size: isRecording ? 25 : 20,
+                    size: isRecording ? 35 : 20,
                   ),
                 ),
               ),
@@ -392,7 +437,6 @@ class ChatPageState extends State<ChatPage> {
     } else {
       pickedFile = await picker.pickVideo(source: source);
     }
-
     if (pickedFile != null) {
       setState(() {
         _addMessage(
@@ -410,6 +454,13 @@ class ChatPageState extends State<ChatPage> {
     if (messageText.isNotEmpty) {
       _addMessage(content: messageText, isAudio: false);
       _messageController.clear();
+    }
+  }
+
+  void _discardRecording() {
+    _stopRecording(sendRecord: false);
+    if (_audioPath != null) {
+      File(_audioPath!).delete();
     }
   }
 

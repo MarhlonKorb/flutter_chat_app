@@ -33,7 +33,7 @@ class DefaultElevatedButton extends StatelessWidget {
       width: width,
       child: ElevatedButton(
         onPressed: onPressed,
-        style: ElevatedButton.styleFrom(
+        style: ElevatedButton.styleFrom(maximumSize: Size(width, height),
           backgroundColor: buttonBackgroundColor,
           foregroundColor: buttonForegroundColor,
           minimumSize: Size(width, height),

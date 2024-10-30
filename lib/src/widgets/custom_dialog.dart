@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_chat_app/src/widgets/default_elevated_button.dart';
 
 // Enum para definir os tipos de diálogos
 enum DialogType { success, alert, error }
@@ -60,7 +61,8 @@ class CustomDialog extends StatelessWidget {
 }
 
 // Função para mostrar o CustomDialog
-Future<void> showCustomDialog(BuildContext context, DialogType type, String message) async {
+Future<void> showCustomDialog(
+    BuildContext context, DialogType type, String message) async {
   String title;
 
   // Defina o título com base no tipo do diálogo
@@ -89,31 +91,42 @@ Future<void> showCustomDialog(BuildContext context, DialogType type, String mess
   );
 }
 
-
 // Diálogo de confirmação que retorna um valor bool
 Future<bool> showConfirmDialog(BuildContext context, String message) async {
   return await showDialog(
-    context: context,
-    barrierDismissible: false, // Usuário precisa escolher uma opção
-    builder: (context) {
-      return AlertDialog(
-        title: const Text('Confirmação'),
-        content: Text(message),
-        actions: <Widget>[
-          TextButton(
-            onPressed: () {
-              Navigator.of(context).pop(false); // Retorna false para "Não"
-            },
-            child: const Text('Não'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              Navigator.of(context).pop(true); // Retorna true para "Sim"
-            },
-            child: const Text('Sim'),
-          ),
-        ],
-      );
-    },
-  ) ?? false; // Retorna false se o diálogo for fechado de outra forma
+        context: context,
+        barrierDismissible: false, // Usuário precisa escolher uma opção
+        builder: (context) {
+          return AlertDialog(
+            title: const Text('Confirmação'),
+            content: Text(message),
+            actions: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Expanded(
+                    child: DefaultElevatedButton(
+                      isWhiteStyle: true,
+                      onPressed: () {
+                        Navigator.of(context).pop(true); 
+                      },
+                      child: const Text('Sim'),
+                    ),
+                  ),
+                  const SizedBox(width: 8), 
+                  Expanded(
+                    child: DefaultElevatedButton(
+                      onPressed: () {
+                        Navigator.of(context).pop(false); 
+                      },
+                      child: const Text('Não'),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          );
+        },
+      ) ?? false; 
 }
+
