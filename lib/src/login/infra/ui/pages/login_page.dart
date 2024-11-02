@@ -255,7 +255,7 @@ class _LoginPageState extends State<LoginPage>
       }
     } on AuthException catch (e) {
       await showCustomDialog(context, DialogType.error, e.toString());
-    } on Exception catch(e){
+    } catch(_){
       await showCustomDialog(context, DialogType.error, 'Não foi possível realizar o login. Por favor, tente novamente mais tarde.');
     }
   }

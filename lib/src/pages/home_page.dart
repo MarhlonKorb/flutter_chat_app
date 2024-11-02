@@ -17,6 +17,16 @@ class HomePage extends StatelessWidget {
     return Scaffold(
       key: scaffoldKey,
       appBar: DefaultAppBar(
+        actions: [
+          Badge(
+            label: const Text('12'),
+            offset: const Offset(-8, 4),
+            child: IconButton(
+              icon: const Icon(Icons.mark_as_unread_sharp),
+              onPressed: () {},
+            ),
+          ),
+        ],
         leading: IconButton(
           icon: const Icon(Icons.menu),
           onPressed: () {

@@ -11,7 +11,7 @@ class ChatService implements ChatFacade {
   final String apiUrl = '${dotenv.get('apiBaseUrl')}/operacao/processar/midia';
 
   @override
-  Future<void> sendFile(String filePath) async {
+  Future<StreamedResponse?> sendFile(String filePath) async {
     final file = File(filePath);
     if (!await _fileExists(file)) {
       throw ('Arquivo não encontrado: $filePath');
@@ -21,7 +21,7 @@ class ChatService implements ChatFacade {
       throw ('Tipo de arquivo não suportado: ${extension(file.path)}');
     }
     final request = await _buildMultipartRequest(apiUrl, file, mediaType);
-    await _sendMultipartRequest(request);
+   return await _sendMultipartRequest(request);
   }
 
   // Verifica se o arquivo existe
@@ -73,14 +73,21 @@ class ChatService implements ChatFacade {
     return request;
   }
 
-  /// Envia a requisição e trata a resposta
-  Future<void> _sendMultipartRequest(MultipartRequest request) async {
-    try {
-      await request.send();
-    } catch (e) {
-      throw ('Erro ao enviar o arquivo: $e');
-    }
+Future<http.StreamedResponse?> _sendMultipartRequest(MultipartRequest request) async {
+  try {
+    // Envia a requisição
+    final StreamedResponse response = await request.send();
+    // Verifica o código de status e processa o conteúdo
+    if (response.statusCode == 200) {
+      // Exemplo: decodifica a resposta JSON
+      return response;
+    } 
+    return null;
+  } catch (e) {
+    throw ('Erro ao enviar o arquivo: $e');
   }
+}
+
 
   @override
   Future<void> sendMessage(String message) async {

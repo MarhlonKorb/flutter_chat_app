@@ -8,15 +8,16 @@ class Message {
   final bool? isVideo;
   final bool? isSentByMe;
   final DateTime? time;
-
+  final bool? isSending;
   Message({
     this.content,
     this.file,
     this.isAudio = false,
     this.isImage = false,
     this.isVideo = false,
-    this.isSentByMe = false,
+    this.isSentByMe = true,
     this.time,
+    this.isSending = false,
   });
 
   Map<String, String> toJson() {
@@ -24,4 +25,5 @@ class Message {
       'arquivo': content!,
     };
   }
+
 }

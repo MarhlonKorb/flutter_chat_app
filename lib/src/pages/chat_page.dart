@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_chat_app/src/chat/application/impl/chat_service.dart';
 import 'package:flutter_chat_app/src/chat/domain/models/message.dart';
@@ -9,6 +10,7 @@ import 'package:flutter_chat_app/src/widgets/custom_dialog.dart';
 import 'package:flutter_chat_app/src/widgets/default_app_bar.dart';
 import 'package:flutter_chat_app/src/widgets/default_text_form_field.dart';
 import 'package:flutter_sound/flutter_sound.dart';
+import 'package:http/http.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:permission_handler/permission_handler.dart';
 
@@ -38,6 +40,7 @@ class ChatPageState extends State<ChatPage> {
   final chatService = ChatService();
   // Para monitorar se o botão está sendo arrastado
   bool isDragging = false;
+  bool isSendingMessage = false;
 
   @override
   void initState() {
@@ -47,11 +50,11 @@ class ChatPageState extends State<ChatPage> {
     _messages.addAll([
       Message(
         content: 'Oi, como você está?',
+        isSentByMe: false,
         time: DateTime.now().subtract(const Duration(minutes: 2)),
       ),
       Message(
         content: 'Estou bem, e você?',
-        isSentByMe: true,
         time: DateTime.now().subtract(const Duration(minutes: 1)),
       ),
     ]);
@@ -145,32 +148,54 @@ class ChatPageState extends State<ChatPage> {
     required bool isAudio,
     bool isImage = false,
     bool isVideo = false,
-    bool isSentByMe = true,
   }) async {
     try {
+      setState(() {
+        isSendingMessage = true;
+      });
       // Envia a mensagem com o arquivo, se for áudio, imagem ou vídeo
       if (isAudio || isImage || isVideo) {
         // Cria a mensagem com o conteúdo e o arquivo
-        await chatService.sendFile(content!);
+        final resultMessage = await chatService.sendFile(content!);
+        if (resultMessage != null) {
+          await _processResponse(resultMessage);
+        }
       } else {
         await chatService.sendMessage(content!);
-        setState(() {
-          _messages.add(Message(
-            content: content,
-            isAudio: isAudio,
-            isImage: isImage,
-            isVideo: isVideo,
-            isSentByMe: isSentByMe,
-            time: DateTime.now(),
-          ));
-        });
       }
+      setState(() {
+        _messages.add(Message(
+          content: content,
+          isAudio: isAudio,
+          isImage: isImage,
+          isVideo: isVideo,
+          time: DateTime.now(),
+        ));
+      });
     } catch (e) {
       await showCustomDialog(context, DialogType.error,
           'Não foi possível enviar a mensagem. Por favor, tente novamente mais tarde.');
+    } finally {
+      setState(() {
+        isSendingMessage = false;
+      });
     }
     // Executa scroll para a última mensagem após adicionar uma nova
     _scrollToBottom();
+  }
+
+  Future<void> _processResponse(StreamedResponse resultMessage) async {
+    final response = await resultMessage.stream.bytesToString();
+    // Extrai o cabeçalho de data em formato de string
+    final dateHeader = resultMessage.headers['date'];
+    // Converte a string de data para DateTime, caso esteja presente
+    DateTime? date;
+    if (dateHeader != null) {
+      date = HttpDate.parse(
+          dateHeader); // Usa a classe HttpDate para parse automático
+    }
+    // Adiciona a mensagem com o conteúdo e a data convertida
+    _messages.add(Message(content: response, time: date));
   }
 
   String _formatDuration(Duration duration) {
@@ -187,201 +212,252 @@ class ChatPageState extends State<ChatPage> {
         permiteRetornar: true,
         title: widget.userChat.username ?? "Nome do usuário",
         actions: [
-          IconButton(
-            onPressed: () {},
+          PopupMenuButton(
             icon: const Icon(Icons.more_vert),
+            itemBuilder: (context) => [
+              PopupMenuItem(
+                value: 1,
+                child: GestureDetector(
+                  onTap: () async => await uploadFile(),
+                  child: const Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text('Anexar arquivo'),
+                      Icon(
+                        Icons.attach_file_sharp,
+                        color: Colors.indigo,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
           ),
         ],
       ),
-      body: Column(
+      body: Stack(
         children: [
-          Expanded(
-            child: ListView.builder(
-              controller: _scrollController,
-              itemCount: _messages.length,
-              itemBuilder: (context, index) {
-                final message = _messages[index];
-                Widget messageContent;
-                if (message.isAudio!) {
-                  messageContent = Row(
-                    children: [
-                      IconButton(
-                        icon: Icon(
-                          currentlyPlayingIndex == index
-                              ? Icons.stop
-                              : Icons.play_arrow,
-                          color: Colors.indigoAccent,
-                        ),
-                        onPressed: () => _playAudio(index, message.content!),
-                      ),
-                      Text(
-                        'Áudio: ${_formatDuration(_recordDuration)}',
-                        style: const TextStyle(color: Colors.indigo),
-                      ),
-                    ],
-                  );
-                } else if (message.isImage!) {
-                  messageContent = GestureDetector(
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) =>
-                              FullScreenImage(imagePath: message.content!),
-                        ),
-                      );
-                    },
-                    child: Hero(
-                      tag: message.content!,
-                      child: Image.file(
-                        File(message.content!),
-                        height: 150,
-                        width: 150,
-                        fit: BoxFit.cover,
-                      ),
-                    ),
-                  );
-                } else if (message.isVideo!) {
-                  messageContent = GestureDetector(
-                    onTap: () {
-                      // Lógica para abrir um player de vídeo
-                    },
-                    child: Container(
-                      height: 150,
-                      width: 150,
-                      color: Colors.black,
-                      child: const Center(
-                        child: Icon(Icons.play_arrow,
-                            color: Colors.white, size: 40),
-                      ),
-                    ),
-                  );
-                } else {
-                  messageContent = Text(
-                    message.content!,
-                    style: const TextStyle(
-                      fontSize: 16,
-                      color: Colors.indigo,
-                    ),
-                  );
-                }
+          Column(
+            children: [
+              Expanded(
+                child: _messages.isEmpty
+                    ? Image.asset(
+                        'assets/images/nao-encontrado.png',
+                        fit: BoxFit.contain,
+                        width: 200,
+                        height: 100,
+                      )
+                    : ListView.builder(
+                        controller: _scrollController,
+                        itemCount: _messages.length,
+                        itemBuilder: (context, index) {
+                          final message = _messages[index];
+                          Widget messageContent;
+                          if (message.isAudio!) {
+                            messageContent = Row(
+                              children: [
+                                IconButton(
+                                  icon: Icon(
+                                    currentlyPlayingIndex == index
+                                        ? Icons.stop
+                                        : Icons.play_arrow,
+                                    color: Colors.indigoAccent,
+                                  ),
+                                  onPressed: () =>
+                                      _playAudio(index, message.content!),
+                                ),
+                                Text(
+                                  'Áudio: ${_formatDuration(_recordDuration)}',
+                                  style: const TextStyle(color: Colors.indigo),
+                                ),
+                              ],
+                            );
+                          } else if (message.isImage!) {
+                            messageContent = GestureDetector(
+                              onTap: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) => FullScreenImage(
+                                      imagePath: message.content!,
+                                    ),
+                                  ),
+                                );
+                              },
+                              child: Hero(
+                                tag: message.content!,
+                                child: Image.file(
+                                  File(message.content!),
+                                  height: 150,
+                                  width: 150,
+                                  fit: BoxFit.cover,
+                                ),
+                              ),
+                            );
+                          } else if (message.isVideo!) {
+                            messageContent = GestureDetector(
+                              onTap: () {
+                                // Lógica para abrir um player de vídeo
+                              },
+                              child: Container(
+                                height: 150,
+                                width: 150,
+                                color: Colors.black,
+                                child: const Center(
+                                  child: Icon(Icons.play_arrow,
+                                      color: Colors.white, size: 40),
+                                ),
+                              ),
+                            );
+                          } else {
+                            messageContent = Text(
+                              message.content!,
+                              style: const TextStyle(
+                                fontSize: 16,
+                                color: Colors.indigo,
+                              ),
+                            );
+                          }
 
-                return Align(
-                  alignment: message.isSentByMe!
-                      ? Alignment.centerRight
-                      : Alignment.centerLeft,
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 10.0, vertical: 5.0),
-                    child: ConstrainedBox(
-                      constraints: BoxConstraints(
-                        maxWidth: MediaQuery.of(context).size.width * 0.7,
-                      ),
-                      child: Card(
-                        color: message.isSentByMe!
-                            ? Colors.blue[50]
-                            : Colors.grey[200],
-                        elevation: 2,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(15),
-                        ),
-                        child: Padding(
-                          padding: const EdgeInsets.all(10.0),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              messageContent,
-                              const SizedBox(height: 5),
-                              Align(
-                                alignment: Alignment.bottomRight,
-                                child: Text(
-                                  _formatTime(message.time!),
-                                  style: const TextStyle(
-                                    fontSize: 12,
-                                    color: Colors.grey,
+                          return Align(
+                            alignment: message.isSentByMe!
+                                ? Alignment.centerRight
+                                : Alignment.centerLeft,
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 10.0, vertical: 5.0),
+                              child: ConstrainedBox(
+                                constraints: BoxConstraints(
+                                  maxWidth:
+                                      MediaQuery.of(context).size.width * 0.7,
+                                ),
+                                child: Card(
+                                  color: message.isSentByMe!
+                                      ? Colors.blue[50]
+                                      : Colors.grey[200],
+                                  elevation: 2,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(15),
+                                  ),
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(10.0),
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        messageContent,
+                                        const SizedBox(height: 5),
+                                        Align(
+                                            alignment: Alignment.bottomRight,
+                                            child: Row(
+                                              mainAxisAlignment:
+                                                  MainAxisAlignment.end,
+                                              children: [
+                                                Text(
+                                                  isSendingMessage
+                                                      ? 'Enviando mensagem'
+                                                      : _formatTime(
+                                                          message.time!),
+                                                  style: const TextStyle(
+                                                      fontSize: 12),
+                                                ),
+                                                const SizedBox(
+                                                  width: 2,
+                                                ),
+                                                Icon(
+                                                  isSendingMessage
+                                                      ? Icons.done
+                                                      : Icons.done_all,
+                                                  color: isSendingMessage
+                                                      ? null
+                                                      : Colors.indigoAccent,
+                                                  size: 15,
+                                                ),
+                                              ],
+                                            )),
+                                      ],
+                                    ),
                                   ),
                                 ),
                               ),
-                            ],
-                          ),
-                        ),
+                            ),
+                          );
+                        },
+                      ),
+              ),
+              if (isRecording)
+                Padding(
+                  padding: const EdgeInsets.all(8.0),
+                  child: Text('Gravando: ${_formatDuration(_recordDuration)}'),
+                ),
+              Row(
+                children: [
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.all(8.0),
+                      child: DefaultTextFormField(
+                        hintText: 'Digite sua mensagem...',
+                        controller: _messageController,
                       ),
                     ),
                   ),
-                );
-              },
-            ),
-          ),
-          if (isRecording)
-            Padding(
-              padding: const EdgeInsets.all(8.0),
-              child: Text('Gravando: ${_formatDuration(_recordDuration)}'),
-            ),
-          Row(
-            children: [
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.all(8.0),
-                  child: DefaultTextFormField(
-                    hintText: 'Digite sua mensagem...',
-                    controller: _messageController,
-                  ),
-                ),
-              ),
-              GestureDetector(
-                onLongPressStart: (details) {
-                  _startRecording();
-                  setState(() {
-                    // Inicia sem arrastar
-                    isDragging = false;
-                  });
-                },
-                onLongPressMoveUpdate: (details) {
-                  // Verifica a posição do toque
-                  RenderBox renderBox = context.findRenderObject() as RenderBox;
-                  Offset localPosition =
-                      renderBox.globalToLocal(details.globalPosition);
+                  GestureDetector(
+                    onLongPressStart: (details) {
+                      _startRecording();
+                      setState(() {
+                        // Inicia sem arrastar
+                        isDragging = false;
+                      });
+                    },
+                    onLongPressMoveUpdate: (details) {
+                      // Verifica a posição do toque
+                      RenderBox renderBox =
+                          context.findRenderObject() as RenderBox;
+                      Offset localPosition =
+                          renderBox.globalToLocal(details.globalPosition);
 
-                  // Verifica se o toque saiu do botão
-                  if (localPosition.distance > 800) {
-                    // Exemplo: se arrastado acima do botão
-                    setState(() {
-                      // Está arrastando
-                      isDragging = true;
-                      isRecording = false;
-                    });
-                  }
-                },
-                onLongPressUp: () {
-                  if (isDragging) {
-                    // Cancela a gravação se arrastado
-                    _discardRecording();
-                  } else {
-                    // Para a gravação normalmente
-                    _stopRecording();
-                  }
-                  setState(() {
-                    // Reinicializa o estado
-                    isDragging = false;
-                  });
-                },
-                child: CircleAvatar(
-                  radius: isRecording ? 30 : 25,
-                  backgroundColor: isRecording ? Colors.red : Colors.indigo,
-                  child: Icon(
-                    isRecording ? Icons.stop : Icons.mic,
-                    color: Colors.white,
-                    size: isRecording ? 35 : 20,
+                      // Verifica se o toque saiu do botão
+                      if (localPosition.distance > 800) {
+                        // Exemplo: se arrastado acima do botão
+                        setState(() {
+                          // Está arrastando
+                          isDragging = true;
+                          isRecording = false;
+                        });
+                      }
+                    },
+                    onLongPressUp: () {
+                      if (isDragging) {
+                        // Cancela a gravação se arrastado
+                        _discardRecording();
+                      } else {
+                        // Para a gravação normalmente
+                        _stopRecording();
+                      }
+                      setState(() {
+                        // Reinicializa o estado
+                        isDragging = false;
+                      });
+                    },
+                    child: CircleAvatar(
+                      radius: isRecording ? 30 : 25,
+                      backgroundColor: isRecording ? Colors.red : Colors.indigo,
+                      child: Icon(
+                        isRecording ? Icons.stop : Icons.mic,
+                        color: Colors.white,
+                        size: isRecording ? 35 : 20,
+                      ),
+                    ),
                   ),
-                ),
-              ),
-              IconButton(
-                icon: const Icon(Icons.camera_alt),
-                onPressed: _showCameraOptions,
-              ),
-              IconButton(
-                icon: const Icon(Icons.send),
-                onPressed: _sendMessage,
+                  IconButton(
+                    icon: const Icon(Icons.camera_alt),
+                    onPressed: _showCameraOptions,
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.send),
+                    onPressed: _sendMessage,
+                  ),
+                ],
               ),
             ],
           ),
@@ -466,5 +542,22 @@ class ChatPageState extends State<ChatPage> {
 
   String _formatTime(DateTime datetime) {
     return '${datetime.hour.toString().padLeft(2, '0')}:${datetime.minute.toString().padLeft(2, '0')}';
+  }
+
+  Future<void> uploadFile() async {
+    // Seleciona o arquivo com o FilePicker
+    FilePickerResult? result = await FilePicker.platform.pickFiles();
+
+    if (result != null && result.files.isNotEmpty) {
+      // Obtém o caminho do arquivo selecionado
+      String? filePath = result.files.single.path;
+
+      if (filePath != null) {
+        final resultMessage = await chatService.sendFile(filePath);
+        if (resultMessage != null) {
+          await _processResponse(resultMessage);
+        }
+      }
+    }
   }
 }
