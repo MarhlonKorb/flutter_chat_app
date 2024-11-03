@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'package:flutter_chat_app/src/chat/domain/models/message.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter_chat_app/src/chat/application/chat_facade.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
@@ -21,7 +20,7 @@ class ChatService implements ChatFacade {
       throw ('Tipo de arquivo não suportado: ${extension(file.path)}');
     }
     final request = await _buildMultipartRequest(apiUrl, file, mediaType);
-   return await _sendMultipartRequest(request);
+    return await _sendMultipartRequest(request);
   }
 
   // Verifica se o arquivo existe
@@ -73,30 +72,40 @@ class ChatService implements ChatFacade {
     return request;
   }
 
-Future<http.StreamedResponse?> _sendMultipartRequest(MultipartRequest request) async {
-  try {
-    // Envia a requisição
-    final StreamedResponse response = await request.send();
-    // Verifica o código de status e processa o conteúdo
-    if (response.statusCode == 200) {
-      // Exemplo: decodifica a resposta JSON
-      return response;
-    } 
-    return null;
-  } catch (e) {
-    throw ('Erro ao enviar o arquivo: $e');
+  Future<http.StreamedResponse?> _sendMultipartRequest(
+      MultipartRequest request) async {
+    try {
+      // Envia a requisição
+      final StreamedResponse response = await request.send();
+      // Verifica o código de status e processa o conteúdo
+        // Exemplo: decodifica a resposta JSON
+        return response;
+    } catch (e) {
+      throw ('Erro ao enviar o arquivo: $e');
+    }
   }
-}
-
 
   @override
-  Future<void> sendMessage(String message) async {
+  Future<String> sendMessage(String message) async {
     final headers = {
       'accept': 'application/json',
     };
+
     try {
-      await http.post(Uri.parse(apiUrl),
-          body: Message(content: message).toJson(), headers: headers);
+      final uri = Uri.parse(apiUrl);
+      final request = http.MultipartRequest('POST', uri);
+      request.headers.addAll(headers);
+
+      // Adiciona a mensagem como um campo de texto na solicitação multipart
+      request.fields['content'] = message;
+
+      // Envia a requisição
+      final streamedResponse = await request.send();
+
+      // Converte a resposta para uma string
+      final response = await http.Response.fromStream(streamedResponse);
+
+      return response.body;
     } catch (e) {
       throw ('Erro ao enviar a mensagem: $e');
     }

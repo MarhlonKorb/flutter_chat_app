@@ -114,7 +114,7 @@ class ChatPageState extends State<ChatPage> {
     });
 
     if (_audioPath != null && sendRecord) {
-      _addMessage(content: _audioPath, isAudio: true);
+      await _addMessage(content: _audioPath, isAudio: true);
     }
   }
 
@@ -149,6 +149,7 @@ class ChatPageState extends State<ChatPage> {
     bool isImage = false,
     bool isVideo = false,
   }) async {
+    late final String resultMsg;
     try {
       setState(() {
         isSendingMessage = true;
@@ -157,11 +158,9 @@ class ChatPageState extends State<ChatPage> {
       if (isAudio || isImage || isVideo) {
         // Cria a mensagem com o conteúdo e o arquivo
         final resultMessage = await chatService.sendFile(content!);
-        if (resultMessage != null) {
-          await _processResponse(resultMessage);
-        }
+        resultMsg = await resultMessage!.stream.bytesToString();
       } else {
-        await chatService.sendMessage(content!);
+        resultMsg = await chatService.sendMessage(content!);
       }
       setState(() {
         _messages.add(Message(
@@ -180,12 +179,45 @@ class ChatPageState extends State<ChatPage> {
         isSendingMessage = false;
       });
     }
+    await Future.delayed(const Duration(milliseconds: 500), () {
+      _messages.add(
+        Message(
+          content: 'Processando mensagem...',
+          isAudio: false,
+          isImage: false,
+          isVideo: false,
+          time: DateTime.now(),
+          isSentByMe: false,
+        ),
+      );
+      setState(() {});
+    });
+
+    await Future.delayed(const Duration(seconds: 2), () {
+      _messages.add(
+        Message(
+          content: resultMsg,
+          isAudio: false,
+          isImage: false,
+          isVideo: false,
+          time: DateTime.now(),
+          isSentByMe: false,
+        ),
+      );
+      setState(() {});
+    });
+
     // Executa scroll para a última mensagem após adicionar uma nova
     _scrollToBottom();
   }
 
-  Future<void> _processResponse(StreamedResponse resultMessage) async {
+  Future<String> _processResponse(StreamedResponse resultMessage) async {
     final response = await resultMessage.stream.bytesToString();
+    // Adiciona a mensagem com o conteúdo e a data convertida
+    return response;
+  }
+
+  String getDateFromResponse(StreamedResponse resultMessage) {
     // Extrai o cabeçalho de data em formato de string
     final dateHeader = resultMessage.headers['date'];
     // Converte a string de data para DateTime, caso esteja presente
@@ -194,8 +226,7 @@ class ChatPageState extends State<ChatPage> {
       date = HttpDate.parse(
           dateHeader); // Usa a classe HttpDate para parse automático
     }
-    // Adiciona a mensagem com o conteúdo e a data convertida
-    _messages.add(Message(content: response, time: date));
+    return date.toString();
   }
 
   String _formatDuration(Duration duration) {
@@ -263,8 +294,8 @@ class ChatPageState extends State<ChatPage> {
                                         : Icons.play_arrow,
                                     color: Colors.indigoAccent,
                                   ),
-                                  onPressed: () =>
-                                      _playAudio(index, message.content!),
+                                  onPressed: () async =>
+                                      await _playAudio(index, message.content!),
                                 ),
                                 Text(
                                   'Áudio: ${_formatDuration(_recordDuration)}',
@@ -311,7 +342,7 @@ class ChatPageState extends State<ChatPage> {
                             );
                           } else {
                             messageContent = Text(
-                              message.content!,
+                              message.content ?? '',
                               style: const TextStyle(
                                 fontSize: 16,
                                 color: Colors.indigo,
@@ -354,10 +385,7 @@ class ChatPageState extends State<ChatPage> {
                                                   MainAxisAlignment.end,
                                               children: [
                                                 Text(
-                                                  isSendingMessage
-                                                      ? 'Enviando mensagem'
-                                                      : _formatTime(
-                                                          message.time!),
+                                                  _formatTime(message.time!),
                                                   style: const TextStyle(
                                                       fontSize: 12),
                                                 ),
@@ -514,21 +542,20 @@ class ChatPageState extends State<ChatPage> {
       pickedFile = await picker.pickVideo(source: source);
     }
     if (pickedFile != null) {
-      setState(() {
-        _addMessage(
-          content: pickedFile!.path,
-          isAudio: false,
-          isImage: isImage,
-          isVideo: !isImage,
-        );
-      });
+      await _addMessage(
+        content: pickedFile.path,
+        isAudio: false,
+        isImage: isImage,
+        isVideo: !isImage,
+      );
+      setState(() {});
     }
   }
 
-  void _sendMessage() {
+  Future<void> _sendMessage() async {
     final messageText = _messageController.text.trim();
     if (messageText.isNotEmpty) {
-      _addMessage(content: messageText, isAudio: false);
+      await _addMessage(content: messageText, isAudio: false);
       _messageController.clear();
     }
   }
