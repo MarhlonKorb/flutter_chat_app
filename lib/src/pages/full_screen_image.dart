@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 class FullScreenImage extends StatelessWidget {
@@ -22,7 +23,7 @@ class FullScreenImage extends StatelessWidget {
       body: Center(
         child: Hero(
           tag: imagePath,
-          child: Image.file(
+          child: kIsWeb ? Image.network(imagePath): Image.file(
             File(imagePath),
             fit: BoxFit.contain,
           ),

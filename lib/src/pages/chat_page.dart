@@ -1,8 +1,10 @@
 import 'dart:async';
 import 'dart:io';
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_chat_app/src/chat/application/impl/chat_service.dart';
+import 'package:flutter_chat_app/src/chat/application/impl/chat_service_mobile.dart';
+import 'package:flutter_chat_app/src/chat/application/impl/chat_service_web.dart';
 import 'package:flutter_chat_app/src/chat/domain/models/message.dart';
 import 'package:flutter_chat_app/src/chat/domain/models/user_chat.dart';
 import 'package:flutter_chat_app/src/pages/full_screen_image.dart';
@@ -37,10 +39,12 @@ class ChatPageState extends State<ChatPage> {
   Timer? _timer;
   Duration _recordDuration = Duration.zero;
   int? currentlyPlayingIndex;
-  final chatService = ChatService();
+  final chatServiceWeb = ChatServiceWeb();
+  final chatServiceMobile = ChatServiceMobile();
   // Para monitorar se o botão está sendo arrastado
   bool isDragging = false;
   bool isSendingMessage = false;
+  String? arquivoNome;
 
   @override
   void initState() {
@@ -49,13 +53,9 @@ class ChatPageState extends State<ChatPage> {
     // Mensagens simuladas de outro usuário
     _messages.addAll([
       Message(
-        content: 'Oi, como você está?',
+        content: 'Oi, como posso lhe ajudar hoje?',
         isSentByMe: false,
         time: DateTime.now().subtract(const Duration(minutes: 2)),
-      ),
-      Message(
-        content: 'Estou bem, e você?',
-        time: DateTime.now().subtract(const Duration(minutes: 1)),
       ),
     ]);
   }
@@ -148,26 +148,63 @@ class ChatPageState extends State<ChatPage> {
     required bool isAudio,
     bool isImage = false,
     bool isVideo = false,
+    bool isArquiveWeb = false,
   }) async {
     late final String resultMsg;
+
     try {
       setState(() {
         isSendingMessage = true;
       });
-      // Envia a mensagem com o arquivo, se for áudio, imagem ou vídeo
-      if (isAudio || isImage || isVideo) {
-        // Cria a mensagem com o conteúdo e o arquivo
-        final resultMessage = await chatService.sendFile(content!);
-        resultMsg = await resultMessage!.stream.bytesToString();
+      String fileName = '';
+      if (kIsWeb) {
+        if (isAudio || isImage || isVideo || isArquiveWeb) {
+          Uint8List? fileBytes;
+
+          if (content != null) {
+            // Para web e mobile, obtemos o arquivo pelo `FilePicker`
+            FilePickerResult? result = await FilePicker.platform.pickFiles();
+
+            if (result != null && result.files.isNotEmpty) {
+              fileBytes = result.files.single.bytes;
+              fileName = result.files.single.name;
+            } else {
+              throw ('Seleção de arquivo cancelada ou falhou.');
+            }
+          } else {
+            throw ('Arquivo não encontrado ou caminho inválido.');
+          }
+          // Envia o arquivo usando os bytes e o nome do arquivo
+          final resultMessage =
+              await chatServiceWeb.sendFile(fileBytes!, fileName);
+          resultMsg = resultMessage ?? 'Erro ao processar a resposta.';
+        } else {
+          // Envia uma mensagem de texto
+          resultMsg = await chatServiceWeb.sendMessage(content!);
+        }
       } else {
-        resultMsg = await chatService.sendMessage(content!);
+        if (isAudio || isImage || isVideo) {
+          // Envia o arquivo usando os bytes e o nome do arquivo
+          final resultMessage =
+              await chatServiceMobile.sendFileMobile(content!);
+          resultMsg = await resultMessage?.stream.bytesToString() ??
+              'Erro ao processar a resposta.';
+        } else {
+          // Envia o arquivo usando os bytes e o nome do arquivo
+          final resultMessage =
+              await chatServiceMobile.sendTextMessage(content!);
+          resultMsg = resultMessage;
+        }
       }
+      // Atualiza o estado e exibe a mensagem enviada
       setState(() {
         _messages.add(Message(
           content: content,
           isAudio: isAudio,
           isImage: isImage,
           isVideo: isVideo,
+          isArchiveWeb: isArquiveWeb,
+          filename: fileName,
           time: DateTime.now(),
         ));
       });
@@ -179,6 +216,8 @@ class ChatPageState extends State<ChatPage> {
         isSendingMessage = false;
       });
     }
+
+    // Exibe mensagem de processamento e resposta
     await Future.delayed(const Duration(milliseconds: 500), () {
       _messages.add(
         Message(
@@ -207,14 +246,23 @@ class ChatPageState extends State<ChatPage> {
       setState(() {});
     });
 
+    // Exibe mensagem de processamento e resposta
+    await Future.delayed(const Duration(milliseconds: 500), () {
+      _messages.add(
+        Message(
+          content: 'Algo mais ou seria isso?',
+          isAudio: false,
+          isImage: false,
+          isVideo: false,
+          time: DateTime.now(),
+          isSentByMe: false,
+        ),
+      );
+      setState(() {});
+    });
+  
     // Executa scroll para a última mensagem após adicionar uma nova
     _scrollToBottom();
-  }
-
-  Future<String> _processResponse(StreamedResponse resultMessage) async {
-    final response = await resultMessage.stream.bytesToString();
-    // Adiciona a mensagem com o conteúdo e a data convertida
-    return response;
   }
 
   String getDateFromResponse(StreamedResponse resultMessage) {
@@ -246,22 +294,22 @@ class ChatPageState extends State<ChatPage> {
           PopupMenuButton(
             icon: const Icon(Icons.more_vert),
             itemBuilder: (context) => [
-              PopupMenuItem(
-                value: 1,
-                child: GestureDetector(
-                  onTap: () async => await uploadFile(),
-                  child: const Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text('Anexar arquivo'),
-                      Icon(
-                        Icons.attach_file_sharp,
-                        color: Colors.indigo,
-                      ),
-                    ],
-                  ),
-                ),
-              ),
+              // PopupMenuItem(
+              //   value: 1,
+              //   child: GestureDetector(
+              //     onTap: () async => await uploadFile(),
+              //     child: const Row(
+              //       mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              //       children: [
+              //         Text('Anexar arquivo'),
+              //         Icon(
+              //           Icons.attach_file_sharp,
+              //           color: Colors.indigo,
+              //         ),
+              //       ],
+              //     ),
+              //   ),
+              // ),
             ],
           ),
         ],
@@ -317,12 +365,29 @@ class ChatPageState extends State<ChatPage> {
                               },
                               child: Hero(
                                 tag: message.content!,
-                                child: Image.file(
-                                  File(message.content!),
-                                  height: 150,
-                                  width: 150,
-                                  fit: BoxFit.cover,
-                                ),
+                                child: kIsWeb
+                                    ? Image.network(
+                                        message.content!,
+                                        width: 150,
+                                      )
+                                    : Image.file(
+                                        File(message.content!),
+                                        height: 150,
+                                        width: 150,
+                                        fit: BoxFit.cover,
+                                      ),
+                              ),
+                            );
+                          } else if (message.isArchiveWeb!) {
+                            messageContent = Center(
+                              child: Column(
+                                children: [
+                                  const Icon(
+                                    Icons.archive_sharp,
+                                    size: 50,
+                                  ),
+                                  Text(message.filename!.toString()),
+                                ],
                               ),
                             );
                           } else if (message.isVideo!) {
@@ -357,28 +422,27 @@ class ChatPageState extends State<ChatPage> {
                             child: Padding(
                               padding: const EdgeInsets.symmetric(
                                   horizontal: 10.0, vertical: 5.0),
-                              child: ConstrainedBox(
-                                constraints: BoxConstraints(
-                                  maxWidth:
-                                      MediaQuery.of(context).size.width * 0.7,
-                                ),
-                                child: Card(
-                                  color: message.isSentByMe!
-                                      ? Colors.blue[50]
-                                      : Colors.grey[200],
-                                  elevation: 2,
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(15),
-                                  ),
-                                  child: Padding(
-                                    padding: const EdgeInsets.all(10.0),
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        messageContent,
-                                        const SizedBox(height: 5),
-                                        Align(
+                              child: IntrinsicWidth(
+                                child: ConstrainedBox(
+                                  constraints: const BoxConstraints(),
+                                  child: Card(
+                                    color: message.isSentByMe!
+                                        ? Colors.blue[50]
+                                        : Colors.grey[200],
+                                    elevation: 2,
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(15),
+                                    ),
+                                    child: Padding(
+                                      padding: const EdgeInsets.all(10.0),
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          // Conteúdo da mensagem
+                                          messageContent,
+                                          const SizedBox(height: 5),
+                                          Align(
                                             alignment: Alignment.bottomRight,
                                             child: Row(
                                               mainAxisAlignment:
@@ -389,9 +453,7 @@ class ChatPageState extends State<ChatPage> {
                                                   style: const TextStyle(
                                                       fontSize: 12),
                                                 ),
-                                                const SizedBox(
-                                                  width: 2,
-                                                ),
+                                                const SizedBox(width: 2),
                                                 Icon(
                                                   isSendingMessage
                                                       ? Icons.done
@@ -402,8 +464,10 @@ class ChatPageState extends State<ChatPage> {
                                                   size: 15,
                                                 ),
                                               ],
-                                            )),
-                                      ],
+                                            ),
+                                          ),
+                                        ],
+                                      ),
                                     ),
                                   ),
                                 ),
@@ -429,61 +493,73 @@ class ChatPageState extends State<ChatPage> {
                       ),
                     ),
                   ),
-                  GestureDetector(
-                    onLongPressStart: (details) {
-                      _startRecording();
-                      setState(() {
-                        // Inicia sem arrastar
-                        isDragging = false;
-                      });
-                    },
-                    onLongPressMoveUpdate: (details) {
-                      // Verifica a posição do toque
-                      RenderBox renderBox =
-                          context.findRenderObject() as RenderBox;
-                      Offset localPosition =
-                          renderBox.globalToLocal(details.globalPosition);
+                  kIsWeb
+                      ? const SizedBox.shrink()
+                      : GestureDetector(
+                          onLongPressStart: (details) {
+                            _startRecording();
+                            setState(() {
+                              // Inicia sem arrastar
+                              isDragging = false;
+                            });
+                          },
+                          onLongPressMoveUpdate: (details) {
+                            // Verifica a posição do toque
+                            RenderBox renderBox =
+                                context.findRenderObject() as RenderBox;
+                            Offset localPosition =
+                                renderBox.globalToLocal(details.globalPosition);
 
-                      // Verifica se o toque saiu do botão
-                      if (localPosition.distance > 800) {
-                        // Exemplo: se arrastado acima do botão
-                        setState(() {
-                          // Está arrastando
-                          isDragging = true;
-                          isRecording = false;
-                        });
-                      }
-                    },
-                    onLongPressUp: () {
-                      if (isDragging) {
-                        // Cancela a gravação se arrastado
-                        _discardRecording();
-                      } else {
-                        // Para a gravação normalmente
-                        _stopRecording();
-                      }
-                      setState(() {
-                        // Reinicializa o estado
-                        isDragging = false;
-                      });
-                    },
-                    child: CircleAvatar(
-                      radius: isRecording ? 30 : 25,
-                      backgroundColor: isRecording ? Colors.red : Colors.indigo,
-                      child: Icon(
-                        isRecording ? Icons.stop : Icons.mic,
-                        color: Colors.white,
-                        size: isRecording ? 35 : 20,
-                      ),
-                    ),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.camera_alt),
-                    onPressed: _showCameraOptions,
-                  ),
+                            // Verifica se o toque saiu do botão
+                            if (localPosition.distance > 800) {
+                              // Exemplo: se arrastado acima do botão
+                              setState(() {
+                                // Está arrastando
+                                isDragging = true;
+                                isRecording = false;
+                              });
+                            }
+                          },
+                          onLongPressUp: () {
+                            if (isDragging) {
+                              // Cancela a gravação se arrastado
+                              _discardRecording();
+                            } else {
+                              // Para a gravação normalmente
+                              _stopRecording();
+                            }
+                            setState(() {
+                              // Reinicializa o estado
+                              isDragging = false;
+                            });
+                          },
+                          child: CircleAvatar(
+                            radius: isRecording ? 30 : 25,
+                            backgroundColor:
+                                isRecording ? Colors.red : Colors.indigo,
+                            child: Icon(
+                              isRecording ? Icons.stop : Icons.mic,
+                              color: Colors.white,
+                              size: isRecording ? 35 : 20,
+                            ),
+                          ),
+                        ),
+                  kIsWeb
+                      ? IconButton(
+                          icon: const Icon(Icons.attach_file_sharp),
+                          onPressed: () async => await _addMessage(
+                            content: '',
+                            isAudio: false,
+                            isArquiveWeb: true,
+                          ),
+                        )
+                      : IconButton(
+                          icon: const Icon(Icons.camera_alt),
+                          onPressed: _showCameraOptions,
+                        ),
                   IconButton(
                     icon: const Icon(Icons.send),
-                    onPressed: _sendMessage,
+                    onPressed: _sendTextMessage,
                   ),
                 ],
               ),
@@ -547,16 +623,17 @@ class ChatPageState extends State<ChatPage> {
         isAudio: false,
         isImage: isImage,
         isVideo: !isImage,
+        isArquiveWeb: isImage,
       );
       setState(() {});
     }
   }
 
-  Future<void> _sendMessage() async {
+  Future<void> _sendTextMessage() async {
     final messageText = _messageController.text.trim();
     if (messageText.isNotEmpty) {
-      await _addMessage(content: messageText, isAudio: false);
       _messageController.clear();
+      await _addMessage(content: messageText, isAudio: false);
     }
   }
 
@@ -576,15 +653,51 @@ class ChatPageState extends State<ChatPage> {
     FilePickerResult? result = await FilePicker.platform.pickFiles();
 
     if (result != null && result.files.isNotEmpty) {
-      // Obtém o caminho do arquivo selecionado
-      String? filePath = result.files.single.path;
+      // Obtém os bytes do arquivo selecionado para uso na web
+      Uint8List? fileBytes = result.files.single.bytes;
+      String fileName = result.files.single.name;
 
-      if (filePath != null) {
-        final resultMessage = await chatService.sendFile(filePath);
+      if (fileBytes != null) {
+        // Envia o arquivo usando os bytes e o nome do arquivo
+        final resultMessage =
+            await chatServiceWeb.sendFile(fileBytes, fileName);
+
         if (resultMessage != null) {
-          await _processResponse(resultMessage);
+          // Processa a resposta conforme necessário
+          // Exemplo: await _processResponse(resultMessage);
         }
       }
     }
+  }
+
+  Future<String?> sendMessageWeb(Message? message) async {
+    if (kIsWeb) {
+      if (message != null &&
+          (message.isAudio! || message.isImage! || message.isVideo!)) {
+        Uint8List? fileBytes;
+        String fileName;
+
+        if (message.content != null) {
+          // Para web e mobile, obtemos o arquivo pelo `FilePicker`
+          FilePickerResult? result = await FilePicker.platform.pickFiles();
+
+          setState(() {});
+          if (result != null && result.files.isNotEmpty) {
+            fileBytes = result.files.single.bytes;
+            fileName = result.files.single.name;
+          } else {
+            throw ('Seleção de arquivo cancelada ou falhou.');
+          }
+        } else {
+          throw ('Arquivo não encontrado ou caminho inválido.');
+        }
+
+        // Envia o arquivo usando os bytes e o nome do arquivo
+        final resultMessage =
+            await chatServiceWeb.sendFile(fileBytes!, fileName);
+        return resultMessage ?? 'Erro ao processar a resposta.';
+      }
+    }
+    return null;
   }
 }

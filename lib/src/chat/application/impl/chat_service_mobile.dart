@@ -1,16 +1,14 @@
 import 'dart:io';
 import 'package:http/http.dart' as http;
-import 'package:flutter_chat_app/src/chat/application/chat_facade.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:http/http.dart';
 import 'package:http_parser/http_parser.dart';
 import 'package:path/path.dart';
 
-class ChatService implements ChatFacade {
+class ChatServiceMobile {
   final String apiUrl = '${dotenv.get('apiBaseUrl')}/operacao/processar/midia';
 
-  @override
-  Future<StreamedResponse?> sendFile(String filePath) async {
+  Future<StreamedResponse?> sendFileMobile(String filePath) async {
     final file = File(filePath);
     if (!await _fileExists(file)) {
       throw ('Arquivo não encontrado: $filePath');
@@ -85,8 +83,7 @@ class ChatService implements ChatFacade {
     }
   }
 
-  @override
-  Future<String> sendMessage(String message) async {
+  Future<String> sendTextMessage(String message) async {
     final headers = {
       'accept': 'application/json',
     };
